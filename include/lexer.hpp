@@ -18,9 +18,15 @@ public:
      */
     Token next();
 
+    /**
+     * loc - Gets current source file location.
+     * Returns: The current source file location.
+     */
+    struct Location loc();
+
 private:
-    std::string     src;      /* Source file string   */
-    struct Location location; /* Source file location */
+    std::string     src_; /* Source file string   */
+    struct Location loc_; /* Source file location */
 
     /**
      * eof - Verifies whether the end of file was reached.

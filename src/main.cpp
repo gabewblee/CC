@@ -3,7 +3,9 @@
 #include <sstream>
 #include <string>
 
+#include "../include/ast.hpp"
 #include "../include/lexer.hpp"
+#include "../include/parser.hpp"
 #include "../include/token.hpp"
 
 int main(int argc, char* argv[]) {
@@ -23,5 +25,8 @@ int main(int argc, char* argv[]) {
 
     std::string src = buf.str();
     Lexer lexer(src);
+    
+    Parser parser(std::move(lexer));
+    Program *program = parser.parse().get();
     return 0;
 }

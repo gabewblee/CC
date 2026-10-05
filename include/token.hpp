@@ -6,8 +6,20 @@
 enum class TokenKind {
     Identifier,
     Integer,
+
+    /* Types */
+    Char,             /* "char"   */
     Int,              /* "int"    */
+    Long,             /* "long"   */
+    Void,             /* "void"   */
+    Struct,           /* "struct" */
+    Union,            /* "union"  */
+    Enum,             /* "enum"   */
+
+    /* Keywords */
     Return,           /* "return" */
+
+    /* Punctuations */
     LeftParenthesis,  /* "("      */
     RightParenthesis, /* ")"      */
     LeftBrace,        /* "{"      */
