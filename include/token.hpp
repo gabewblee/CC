@@ -8,23 +8,81 @@ enum class TokenKind {
     Integer,
 
     /* Types */
-    Char,             /* "char"   */
-    Int,              /* "int"    */
-    Long,             /* "long"   */
-    Void,             /* "void"   */
-    Struct,           /* "struct" */
-    Union,            /* "union"  */
-    Enum,             /* "enum"   */
+    Char,                /* "char"     */
+    Int,                 /* "int"      */
+    Long,                /* "long"     */
+    Void,                /* "void"     */
+    Struct,              /* "struct"   */
+    Union,               /* "union"    */
+    Enum,                /* "enum"     */
 
     /* Keywords */
-    Return,           /* "return" */
+    Return,              /* "return"   */
+    While,               /* "while"    */
+    If,                  /* "if"       */
+    Else,                /* "else"     */
+    Break,               /* "break"    */
+    Continue,            /* "continue" */
 
-    /* Punctuations */
-    LeftParenthesis,  /* "("      */
-    RightParenthesis, /* ")"      */
-    LeftBrace,        /* "{"      */
-    RightBrace,       /* "}"      */
-    Semicolon,        /* ";"      */
+    /* Punctuation */
+    LeftParenthesis,     /* "("        */
+    RightParenthesis,    /* ")"        */
+    LeftBracket,         /* "["        */
+    RightBracket,        /* "]"        */
+    LeftBrace,           /* "{"        */
+    RightBrace,          /* "}"        */
+    Semicolon,           /* ";"        */
+    Comma,               /* ","        */
+    Dot,                 /* "."        */
+    Arrow,               /* "->"       */
+
+    /* Assignment operators */
+    Equal,               /* "="        */
+    PlusEqual,           /* "+="       */
+    MinusEqual,          /* "-="       */
+    StarEqual,           /* "*="       */
+    SlashEqual,          /* "/="       */
+    PercentEqual,        /* "%="       */
+    AmpersandEqual,      /* "&="       */
+    PipeEqual,           /* "|="       */
+    CaretEqual,          /* "^="       */
+    LessLessEqual,       /* "<<="      */
+    GreaterGreaterEqual, /* ">>="      */
+
+    /* Arithmetic operators */
+    Plus,                /* "+"        */
+    Minus,               /* "-"        */
+    Star,                /* "*"        */
+    Slash,               /* "/"        */
+    Percent,             /* "%"        */
+
+    /* Increment / decrement */
+    PlusPlus,            /* "++"       */
+    MinusMinus,          /* "--"       */
+
+    /* Comparison operators */
+    EqualEqual,          /* "=="       */
+    BangEqual,           /* "!="       */
+    Less,                /* "<"        */
+    LessEqual,           /* "<="       */
+    Greater,             /* ">"        */
+    GreaterEqual,        /* ">="       */
+
+    /* Logical operators */
+    Bang,                /* "!"        */
+    AmpersandAmpersand,  /* "&&"       */
+    PipePipe,            /* "||"       */
+
+    /* Bitwise operators */
+    Ampersand,           /* "&"        */
+    Pipe,                /* "|"        */
+    Caret,               /* "^"        */
+    Tilde,               /* "~"        */
+
+    /* Shift operators */
+    LessLess,            /* "<<"       */
+    GreaterGreater,      /* ">>"       */
+
     EndOfFile,
     Invalid
 };
