@@ -12,13 +12,13 @@
  * -------------------------------------------------- */
 
 enum class TypeKind {
-    Int,
     Char,
+    Enum,
+    Int,
     Long,
-    Void,
     Struct,
     Union,
-    Enum
+    Void
 };
 
 class Type {
@@ -83,17 +83,17 @@ private:
 
 enum class BinOp {
     Add,
-    Subtract,
-    Multiply,
     Divide,
     Modulo,
+    Multiply,
+    Subtract,
 
     Equal,
-    NotEqual,
-    Less,
-    LessEqual,
     Greater,
     GreaterEqual,
+    Less,
+    LessEqual,
+    NotEqual,
 
     LogicalAnd,
     LogicalOr,
@@ -120,16 +120,16 @@ private:
 };
 
 enum class UnOp {
-    Plus,
-    Negate,
-    LogicalNot,
+    AddressOf,
     BitNot,
     Dereference,
-    AddressOf,
-    PreIncrement,
-    PreDecrement,
+    LogicalNot,
+    Negate,
+    Plus,
+    PostDecrement,
     PostIncrement,
-    PostDecrement
+    PreDecrement,
+    PreIncrement
 };
 
 class UnExpr : public Expr {
@@ -142,12 +142,12 @@ private:
 };
 
 enum class AssignOp {
-    Assign,
     AddAssign,
-    SubAssign,
-    MulAssign,
+    Assign,
     DivAssign,
-    ModAssign
+    ModAssign,
+    MulAssign,
+    SubAssign
 };
 
 class AssignExpr : public Expr {

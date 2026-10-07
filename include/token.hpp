@@ -4,103 +4,123 @@
 #include <string>
 
 enum class TokenKind {
-    Identifier,
-    Integer,
+    Identifier,          /* Identifier literal */
+    Integer,             /* Integer literal    */
+    Character,           /* Character literal  */
+    String,              /* String literal     */
 
     /* Types */
-    Char,                /* "char"     */
-    Int,                 /* "int"      */
-    Long,                /* "long"     */
-    Void,                /* "void"     */
-    Struct,              /* "struct"   */
-    Union,               /* "union"    */
-    Enum,                /* "enum"     */
+    Char,                /* "char"             */
+    Enum,                /* "enum"             */
+    Int,                 /* "int"              */
+    Long,                /* "long"             */
+    Struct,              /* "struct"           */
+    Union,               /* "union"            */
+    Void,                /* "void"             */
 
     /* Keywords */
-    Return,              /* "return"   */
-    While,               /* "while"    */
-    If,                  /* "if"       */
-    Else,                /* "else"     */
-    Break,               /* "break"    */
-    Continue,            /* "continue" */
+    Break,               /* "break"            */
+    Case,                /* "case"             */
+    Continue,            /* "continue"         */
+    Default,             /* "default"          */
+    Else,                /* "else"             */
+    For,                 /* "for"              */
+    If,                  /* "if"               */
+    Return,              /* "return"           */
+    Sizeof,              /* "sizeof"           */
+    Switch,              /* "switch"           */
+    While,               /* "while"            */
 
     /* Punctuation */
-    LeftParenthesis,     /* "("        */
-    RightParenthesis,    /* ")"        */
-    LeftBracket,         /* "["        */
-    RightBracket,        /* "]"        */
-    LeftBrace,           /* "{"        */
-    RightBrace,          /* "}"        */
-    Semicolon,           /* ";"        */
-    Comma,               /* ","        */
-    Dot,                 /* "."        */
-    Arrow,               /* "->"       */
+    Arrow,               /* "->"               */
+    Colon,               /* ":"                */
+    Comma,               /* ","                */
+    Dot,                 /* "."                */
+    LeftBrace,           /* "{"                */
+    LeftBracket,         /* "["                */
+    LeftParenthesis,     /* "("                */
+    RightBrace,          /* "}"                */
+    RightBracket,        /* "]"                */
+    RightParenthesis,    /* ")"                */
+    Semicolon,           /* ";"                */
 
     /* Assignment operators */
-    Equal,               /* "="        */
-    PlusEqual,           /* "+="       */
-    MinusEqual,          /* "-="       */
-    StarEqual,           /* "*="       */
-    SlashEqual,          /* "/="       */
-    PercentEqual,        /* "%="       */
-    AmpersandEqual,      /* "&="       */
-    PipeEqual,           /* "|="       */
-    CaretEqual,          /* "^="       */
-    LessLessEqual,       /* "<<="      */
-    GreaterGreaterEqual, /* ">>="      */
+    AmpersandEqual,      /* "&="               */
+    CaretEqual,          /* "^="               */
+    Equal,               /* "="                */
+    GreaterGreaterEqual, /* ">>="              */
+    LessLessEqual,       /* "<<="              */
+    MinusEqual,          /* "-="               */
+    PercentEqual,        /* "%="               */
+    PipeEqual,           /* "|="               */
+    PlusEqual,           /* "+="               */
+    SlashEqual,          /* "/="               */
+    StarEqual,           /* "*="               */
 
     /* Arithmetic operators */
-    Plus,                /* "+"        */
-    Minus,               /* "-"        */
-    Star,                /* "*"        */
-    Slash,               /* "/"        */
-    Percent,             /* "%"        */
+    Minus,               /* "-"                */
+    Percent,             /* "%"                */
+    Plus,                /* "+"                */
+    Slash,               /* "/"                */
+    Star,                /* "*"                */
 
     /* Increment / decrement */
-    PlusPlus,            /* "++"       */
-    MinusMinus,          /* "--"       */
+    MinusMinus,          /* "--"               */
+    PlusPlus,            /* "++"               */
 
     /* Comparison operators */
-    EqualEqual,          /* "=="       */
-    BangEqual,           /* "!="       */
-    Less,                /* "<"        */
-    LessEqual,           /* "<="       */
-    Greater,             /* ">"        */
-    GreaterEqual,        /* ">="       */
+    BangEqual,           /* "!="               */
+    EqualEqual,          /* "=="               */
+    Greater,             /* ">"                */
+    GreaterEqual,        /* ">="               */
+    Less,                /* "<"                */
+    LessEqual,           /* "<="               */
 
     /* Logical operators */
-    Bang,                /* "!"        */
-    AmpersandAmpersand,  /* "&&"       */
-    PipePipe,            /* "||"       */
+    AmpersandAmpersand,  /* "&&"               */
+    Bang,                /* "!"                */
+    PipePipe,            /* "||"               */
 
     /* Bitwise operators */
-    Ampersand,           /* "&"        */
-    Pipe,                /* "|"        */
-    Caret,               /* "^"        */
-    Tilde,               /* "~"        */
+    Ampersand,           /* "&"                */
+    Caret,               /* "^"                */
+    Pipe,                /* "|"                */
+    Tilde,               /* "~"                */
 
     /* Shift operators */
-    LessLess,            /* "<<"       */
-    GreaterGreater,      /* ">>"       */
+    GreaterGreater,      /* ">>"               */
+    LessLess,            /* "<<"               */
 
     EndOfFile,
     Invalid
 };
 
+/**
+ * Location - Represents a source file location.
+ * @offset: The source file offset, beginning at 0.
+ * @line: The source file line, beginning at 1.
+ * @col: The source file column, beginning at 1.
+ */
 struct Location {
-    std::size_t offset = 0; /* Source file offset */
-    std::size_t line   = 1; /* Source file line   */
-    std::size_t col    = 1; /* Source file column */
-};
-
-struct Token {
-    TokenKind       kind;   /* Token kind     */
-    std::string     lexeme; /* Token lexeme   */
-    struct Location loc;    /* Token location */
+    std::size_t offset = 0;
+    std::size_t line   = 1;
+    std::size_t col    = 1;
 };
 
 /**
- * describe - Describes a token based on @kind.
+ * Token - Represents a source file token.
+ * @kind: The token kind.
+ * @lexeme: The token lexeme.
+ * @loc: The token location.
+ */
+struct Token {
+    TokenKind       kind;
+    std::string     lexeme;
+    struct Location loc;
+};
+
+/**
+ * describe - Describes a token based on its kind.
  * @kind: The token kind to describe by.
  * Returns: The token description.
  */

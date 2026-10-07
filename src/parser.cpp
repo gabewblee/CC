@@ -97,30 +97,38 @@ std::unique_ptr<Expr> Parser::parse_un_expr() {
     Token token = peek();
     UnOp op;
     switch (token.kind) {
-    case TokenKind::Plus:
-        op = UnOp::Plus;
-        break;
+    /* Arithmetic operators */
     case TokenKind::Minus:
         op = UnOp::Negate;
         break;
-    case TokenKind::Bang:
-        op = UnOp::LogicalNot;
-        break;
-    case TokenKind::Tilde:
-        op = UnOp::BitNot;
+    case TokenKind::Plus:
+        op = UnOp::Plus;
         break;
     case TokenKind::Star:
         op = UnOp::Dereference;
         break;
-    case TokenKind::Ampersand:
-        op = UnOp::AddressOf;
+
+    /* Increment / decrement */
+    case TokenKind::MinusMinus:
+        op = UnOp::PreDecrement;
         break;
     case TokenKind::PlusPlus:
         op = UnOp::PreIncrement;
         break;
-    case TokenKind::MinusMinus:
-        op = UnOp::PreDecrement;
+
+    /* Logical operators */
+    case TokenKind::Bang:
+        op = UnOp::LogicalNot;
         break;
+
+    /* Bitwise operators */
+    case TokenKind::Ampersand:
+        op = UnOp::AddressOf;
+        break;
+    case TokenKind::Tilde:
+        op = UnOp::BitNot;
+        break;
+
     default:
         return parse_postfix_expr();
     }
@@ -467,48 +475,68 @@ std::unique_ptr<EnumDecl> Parser::parse_enum_def() {
 
 int Parser::precedence(TokenKind kind) {
     switch (kind) {
-        case TokenKind::PipePipe:           return 1;
-        case TokenKind::AmpersandAmpersand: return 2;
-        case TokenKind::Pipe:               return 3;
-        case TokenKind::Caret:              return 4;
-        case TokenKind::Ampersand:          return 5;
-        case TokenKind::EqualEqual:
-        case TokenKind::BangEqual:          return 6;
-        case TokenKind::Less:
-        case TokenKind::LessEqual:
-        case TokenKind::Greater:
-        case TokenKind::GreaterEqual:       return 7;
-        case TokenKind::LessLess:
-        case TokenKind::GreaterGreater:     return 8;
-        case TokenKind::Plus:
+        /* Arithmetic operators */
         case TokenKind::Minus:              return 9;
-        case TokenKind::Star:
-        case TokenKind::Slash:
         case TokenKind::Percent:            return 10;
+        case TokenKind::Plus:               return 9;
+        case TokenKind::Slash:              return 10;
+        case TokenKind::Star:               return 10;
+
+        /* Comparison operators */
+        case TokenKind::BangEqual:
+        case TokenKind::EqualEqual:         return 6;
+        case TokenKind::Greater:
+        case TokenKind::GreaterEqual:
+        case TokenKind::Less:
+        case TokenKind::LessEqual:          return 7;
+
+        /* Logical operators */
+        case TokenKind::AmpersandAmpersand: return 2;
+        case TokenKind::PipePipe:           return 1;
+
+        /* Bitwise operators */
+        case TokenKind::Ampersand:          return 5;
+        case TokenKind::Caret:              return 4;
+        case TokenKind::Pipe:               return 3;
+
+        /* Shift operators */
+        case TokenKind::GreaterGreater:
+        case TokenKind::LessLess:           return 8;
+
         default:                            return 0;
     }
 }
 
 BinOp Parser::binop(TokenKind kind) {
     switch (kind) {
-        case TokenKind::PipePipe:           return BinOp::LogicalOr;
-        case TokenKind::AmpersandAmpersand: return BinOp::LogicalAnd;
-        case TokenKind::Pipe:               return BinOp::BitOr;
-        case TokenKind::Caret:              return BinOp::BitXor;
-        case TokenKind::Ampersand:          return BinOp::BitAnd;
-        case TokenKind::EqualEqual:         return BinOp::Equal;
+        /* Arithmetic operators */
+        case TokenKind::Minus:              return BinOp::Subtract;
+        case TokenKind::Percent:            return BinOp::Modulo;
+        case TokenKind::Plus:               return BinOp::Add;
+        case TokenKind::Slash:              return BinOp::Divide;
+        case TokenKind::Star:               return BinOp::Multiply;
+
+        /* Comparison operators */
         case TokenKind::BangEqual:          return BinOp::NotEqual;
-        case TokenKind::Less:               return BinOp::Less;
-        case TokenKind::LessEqual:          return BinOp::LessEqual;
+        case TokenKind::EqualEqual:         return BinOp::Equal;
         case TokenKind::Greater:            return BinOp::Greater;
         case TokenKind::GreaterEqual:       return BinOp::GreaterEqual;
-        case TokenKind::LessLess:           return BinOp::ShiftLeft;
+        case TokenKind::Less:               return BinOp::Less;
+        case TokenKind::LessEqual:          return BinOp::LessEqual;
+
+        /* Logical operators */
+        case TokenKind::AmpersandAmpersand: return BinOp::LogicalAnd;
+        case TokenKind::PipePipe:           return BinOp::LogicalOr;
+
+        /* Bitwise operators */
+        case TokenKind::Ampersand:          return BinOp::BitAnd;
+        case TokenKind::Caret:              return BinOp::BitXor;
+        case TokenKind::Pipe:               return BinOp::BitOr;
+
+        /* Shift operators */
         case TokenKind::GreaterGreater:     return BinOp::ShiftRight;
-        case TokenKind::Plus:               return BinOp::Add;
-        case TokenKind::Minus:              return BinOp::Subtract;
-        case TokenKind::Star:               return BinOp::Multiply;
-        case TokenKind::Slash:              return BinOp::Divide;
-        case TokenKind::Percent:            return BinOp::Modulo;
+        case TokenKind::LessLess:           return BinOp::ShiftLeft;
+
         default:                            std::abort();
     }
 }

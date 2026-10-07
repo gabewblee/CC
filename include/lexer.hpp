@@ -7,14 +7,14 @@
 class Lexer {
 public:
     /**
-     * Lexer - Initializes the lexer with @src.
+     * Lexer - Initializes the lexer with the source file string.
      * @src: The source file string to initialize with.
      */
     Lexer(std::string src);
 
     /**
-     * next - Gets next token from the source file.
-     * Returns: The next token. 
+     * next - Gets next source file token.
+     * Returns: The next source file token.
      */
     Token next();
 
@@ -29,7 +29,7 @@ private:
     struct Location loc_; /* Source file location */
 
     /**
-     * eof - Verifies whether the end of file was reached.
+     * eof - Checks whether end of file was reached.
      * Returns: True if reached, false otherwise.
      */
     bool eof();
@@ -42,7 +42,18 @@ private:
      * Returns: The initialized token.
      */
     Token tokenize(TokenKind kind, std::string lexeme, struct Location location);
-    
+
+    /**
+     * either - Tokenizes a one or two character token based on whether the current
+                character is @c.
+     * @c: The character to differentiate by.
+     * @yes: The token kind if the current character is @c.
+     * @no: The token kind if the current character is not @c.
+     * @loc: The token location.
+     * Returns: The one or two character token.
+     */
+    Token either(char c, TokenKind yes, TokenKind no, struct Location loc);
+
     /**
      * peek - Peeks @ahead characters forward into the source file.
      * @ahead: The number of characters to peek forward by.
@@ -51,12 +62,12 @@ private:
     char peek(std::size_t ahead = 0);
 
     /**
-     * advance - Advances the source file cursor.
+     * advance - Advances the source file position by one.
      */
     void advance();
 
     /**
-     * handle_blank - Handles whitespaces.
+     * handle_blank - Handles whitespaces and comments.
      */
     void handle_blank();
     
@@ -71,4 +82,11 @@ private:
      * Returns: The digit token.
      */
     Token handle_digit();
+
+    /**
+     * handle_quote - Handles characters and strings.
+     * @quote: The delimiting quote, either '\'' or '"'.
+     * Returns: The quoted token.
+     */
+    Token handle_quote(char quote);
 };
