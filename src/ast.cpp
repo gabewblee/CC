@@ -28,6 +28,22 @@ Expr::Expr(struct Location loc) : Node(loc) {
 
 }
 
+CharExpr::CharExpr(struct Location loc, std::string val) : Expr(loc), val_(val) {
+
+}
+
+std::string& CharExpr::val() {
+    return val_;
+}
+
+StringExpr::StringExpr(struct Location loc, std::string val) : Expr(loc), val_(val) {
+
+}
+
+std::string& StringExpr::val() {
+    return val_;
+}
+
 IntExpr::IntExpr(struct Location loc, long val) : Expr(loc), val_(val) {
 
 }
@@ -42,6 +58,18 @@ IdExpr::IdExpr(struct Location loc, std::string id) : Expr(loc), id_(std::move(i
 
 std::string& IdExpr::id() {
     return id_;
+}
+
+SizeofExpr::SizeofExpr(struct Location loc, std::unique_ptr<Expr> operand) : Expr(loc), operand_(std::move(operand)) {
+
+}
+
+SizeofTypeExpr::SizeofTypeExpr(struct Location loc, Type type) : Expr(loc), type_(type) {
+    
+}
+
+CastExpr::CastExpr(struct Location loc, Type type, std::unique_ptr<Expr> operand) : Expr(loc), type_(type), operand_(std::move(operand)) {
+
 }
 
 BinExpr::BinExpr(struct Location loc, BinOp op, std::unique_ptr<Expr> left, std::unique_ptr<Expr> right) : Expr(loc), op_(op), left_(std::move(left)), right_(std::move(right)) {
@@ -108,6 +136,22 @@ IfStmt::IfStmt(struct Location loc, std::unique_ptr<Expr> cond, std::unique_ptr<
 
 }
 
+SwitchStmt::SwitchStmt(struct Location loc, std::unique_ptr<Expr> expr, std::unique_ptr<Stmt> body) : Stmt(loc), expr_(std::move(expr)), body_(std::move(body)) {
+
+}
+
+CaseStmt::CaseStmt(struct Location loc, std::unique_ptr<Expr> val, std::unique_ptr<Stmt> stmt) : Stmt(loc), val_(std::move(val)), stmt_(std::move(stmt)) {
+
+}
+
+DefaultStmt::DefaultStmt(struct Location loc, std::unique_ptr<Stmt> stmt) : Stmt(loc), stmt_(std::move(stmt)) {
+
+}
+
+ForStmt::ForStmt(struct Location loc, std::vector<std::unique_ptr<VarDecl>> decls, std::unique_ptr<Expr> init, std::unique_ptr<Expr> cond, std::unique_ptr<Expr> step, std::unique_ptr<Stmt> body) : Stmt(loc), decls_(std::move(decls)), init_(std::move(init)), cond_(std::move(cond)), step_(std::move(step)), body_(std::move(body)) {
+
+}
+
 WhileStmt::WhileStmt(struct Location loc, std::unique_ptr<Expr> cond, std::unique_ptr<Stmt> body) : Stmt(loc), cond_(std::move(cond)), body_(std::move(body)) {
 
 }
@@ -165,6 +209,14 @@ StructDecl::StructDecl(struct Location loc, std::string id) : Decl(loc), id_(std
 }
 
 void StructDecl::add(std::unique_ptr<FieldDecl> field) {
+    fields_.push_back(std::move(field));
+}
+
+UnionDecl::UnionDecl(struct Location loc, std::string id) : Decl(loc), id_(std::move(id)) {
+
+}
+
+void UnionDecl::add(std::unique_ptr<FieldDecl> field) {
     fields_.push_back(std::move(field));
 }
 

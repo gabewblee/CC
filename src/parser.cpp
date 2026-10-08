@@ -1,3 +1,10 @@
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "../include/ast.hpp"
 #include "../include/parser.hpp"
 
@@ -8,10 +15,9 @@ Parser::Parser(Lexer lexer) : lexer_(std::move(lexer)) {
 }
 
 std::unique_ptr<Program> Parser::parse() {
-    std::unique_ptr<Program> program = std::make_unique<Program>(lookahead_[0].loc);
-    while (!check(TokenKind::EndOfFile))
-        program->add(parse_decl());
-    
+    std::unique_ptr<Program> program = std::make_unique<Program>(peek().loc);
+    while (!check(TokenKind::EndOfFile)) parse_external_decl(*program);
+    consume(TokenKind::EndOfFile);
     return program;
 }
 
@@ -19,43 +25,78 @@ std::unique_ptr<Program> Parser::parse() {
  * Type
  * -------------------------------------------------- */
 
-Type Parser::parse_type() {
+Type Parser::parse_type_base() {
     Type type{};
     type.depth = 0;
-    if (check(TokenKind::Int)) {
-        advance();
-        type.kind = TypeKind::Int;
-    } else if (check(TokenKind::Char)) {
-        advance();
-        type.kind = TypeKind::Char;
-    } else if (check(TokenKind::Long)) {
-        advance();
-        type.kind = TypeKind::Long;
-    } else if (check(TokenKind::Void)) {
-        advance();
-        type.kind = TypeKind::Void;
-    } else if (check(TokenKind::Struct)) {
-        advance();
-        type.kind = TypeKind::Struct;
-        type.tag  = consume(TokenKind::Identifier).lexeme;
-    } else if (check(TokenKind::Union)) {
-        advance();
-        type.kind = TypeKind::Union;
-        type.tag  = consume(TokenKind::Identifier).lexeme;
-    } else if (check(TokenKind::Enum)) {
-        advance();
-        type.kind = TypeKind::Enum;
-        type.tag  = consume(TokenKind::Identifier).lexeme;
-    } else {
-        std::fprintf(stderr, "%zu:%zu: error: unexpected token '%s'\n", lookahead_[0].loc.line, lookahead_[0].loc.col, lookahead_[0].lexeme.c_str());
-        std::exit(1);
+    switch (peek().kind) {
+        case TokenKind::Void:
+            consume(TokenKind::Void);
+            type.kind = TypeKind::Void;
+            break;
+        case TokenKind::Char:
+            consume(TokenKind::Char);
+            type.kind = TypeKind::Char;
+            break;
+        case TokenKind::Int:
+            consume(TokenKind::Int);
+            type.kind = TypeKind::Int;
+            break;
+        case TokenKind::Long:
+            consume(TokenKind::Long);
+            type.kind = TypeKind::Long;
+            break;
+        case TokenKind::Struct:
+            consume(TokenKind::Struct);
+            type.kind = TypeKind::Struct;
+            type.tag = consume(TokenKind::Identifier).lexeme;
+            break;
+        case TokenKind::Union:
+            consume(TokenKind::Union);
+            type.kind = TypeKind::Union;
+            type.tag = consume(TokenKind::Identifier).lexeme;
+            break;
+        case TokenKind::Enum:
+            consume(TokenKind::Enum);
+            type.kind = TypeKind::Enum;
+            type.tag = consume(TokenKind::Identifier).lexeme;
+            break;
+        default:
+            error("expected type");
     }
+    
+    return type;
+}
 
+Type Parser::parse_type() {
+    Type type = parse_type_base();
     while (check(TokenKind::Star)) {
-        advance();
+        consume(TokenKind::Star);
         type.depth++;
     }
+
+    parse_array_suffix(type);
     return type;
+}
+
+Declarator Parser::parse_declarator(Type base) {
+    Type type = std::move(base);
+    while (check(TokenKind::Star)) {
+        consume(TokenKind::Star);
+        type.depth++;
+    }
+
+    Token id = consume(TokenKind::Identifier);
+    parse_array_suffix(type);
+    return Declarator{id.loc, std::move(id.lexeme), std::move(type)};
+}
+
+void Parser::parse_array_suffix(Type& type) {
+    while (check(TokenKind::LeftBracket)) {
+        consume(TokenKind::LeftBracket);
+        Token sz = consume(TokenKind::Integer);
+        type.dimensions.push_back(std::stoul(sz.lexeme));
+        consume(TokenKind::RightBracket);
+    }
 }
 
 /* --------------------------------------------------
@@ -68,91 +109,89 @@ std::unique_ptr<Expr> Parser::parse_expr() {
 
 std::unique_ptr<Expr> Parser::parse_assign_expr() {
     std::unique_ptr<Expr> left = parse_bin_expr(1);
-    if (!check(TokenKind::Equal))
-        return left;
-
-    struct Location loc = left->loc();
-    consume(TokenKind::Equal);
+    if (!isassignop(peek().kind)) return left;
+    TokenKind kind = peek().kind;
+    Location loc = left->loc();
+    consume(kind);
     std::unique_ptr<Expr> right = parse_assign_expr();
-    return std::make_unique<AssignExpr>(loc, AssignOp::Assign, std::move(left), std::move(right));
+    return std::make_unique<AssignExpr>(loc, assignop(kind), std::move(left), std::move(right));
 }
 
 std::unique_ptr<Expr> Parser::parse_bin_expr(int min) {
     std::unique_ptr<Expr> left = parse_un_expr();
     while (true) {
         int prec = precedence(peek().kind);
-        if (prec == 0 || prec < min)
-            break;
-
-        Token op = peek();
-        advance();
+        if (prec == 0 || prec < min) break;
+        Token op = consume(peek().kind);
         std::unique_ptr<Expr> right = parse_bin_expr(prec + 1);
-        struct Location loc = left->loc();
+        Location loc = left->loc();
         left = std::make_unique<BinExpr>(loc, binop(op.kind), std::move(left), std::move(right));
     }
+
     return left;
 }
 
 std::unique_ptr<Expr> Parser::parse_un_expr() {
+    if (check(TokenKind::Sizeof)) return parse_sizeof_expr();
+    if (cast()) return parse_cast_expr();
     Token token = peek();
     UnOp op;
     switch (token.kind) {
-    /* Arithmetic operators */
-    case TokenKind::Minus:
-        op = UnOp::Negate;
-        break;
-    case TokenKind::Plus:
-        op = UnOp::Plus;
-        break;
-    case TokenKind::Star:
-        op = UnOp::Dereference;
-        break;
-
-    /* Increment / decrement */
-    case TokenKind::MinusMinus:
-        op = UnOp::PreDecrement;
-        break;
-    case TokenKind::PlusPlus:
-        op = UnOp::PreIncrement;
-        break;
-
-    /* Logical operators */
-    case TokenKind::Bang:
-        op = UnOp::LogicalNot;
-        break;
-
-    /* Bitwise operators */
-    case TokenKind::Ampersand:
-        op = UnOp::AddressOf;
-        break;
-    case TokenKind::Tilde:
-        op = UnOp::BitNot;
-        break;
-
-    default:
-        return parse_postfix_expr();
+        case TokenKind::Plus:       op = UnOp::Plus;         break;
+        case TokenKind::Minus:      op = UnOp::Negate;       break;
+        case TokenKind::Bang:       op = UnOp::LogicalNot;   break;
+        case TokenKind::Tilde:      op = UnOp::BitNot;       break;
+        case TokenKind::Star:       op = UnOp::Dereference;  break;
+        case TokenKind::Ampersand:  op = UnOp::AddressOf;    break;
+        case TokenKind::PlusPlus:   op = UnOp::PreIncrement; break;
+        case TokenKind::MinusMinus: op = UnOp::PreDecrement; break;
+        default:                    return parse_postfix_expr();
     }
 
-    advance();
+    consume(token.kind);
     std::unique_ptr<Expr> operand = parse_un_expr();
     return std::make_unique<UnExpr>(token.loc, op, std::move(operand));
+}
+
+std::unique_ptr<Expr> Parser::parse_sizeof_expr() {
+    Token keyword = consume(TokenKind::Sizeof);
+    if (check(TokenKind::LeftParenthesis) && istype(1)) {
+        consume(TokenKind::LeftParenthesis);
+        Type type = parse_type();
+        consume(TokenKind::RightParenthesis);
+        return std::make_unique<SizeofTypeExpr>(keyword.loc, std::move(type));
+    }
+    
+    return std::make_unique<SizeofExpr>(keyword.loc, parse_un_expr());
+}
+
+std::unique_ptr<Expr> Parser::parse_cast_expr() {
+    Token left = consume(TokenKind::LeftParenthesis);
+    Type type = parse_type();
+    consume(TokenKind::RightParenthesis);
+    std::unique_ptr<Expr> operand = parse_un_expr();
+    return std::make_unique<CastExpr>(left.loc, std::move(type), std::move(operand));
 }
 
 std::unique_ptr<Expr> Parser::parse_postfix_expr() {
     std::unique_ptr<Expr> expr = parse_primary_expr();
     while (true) {
-        struct Location loc = expr->loc();
+        Location loc = expr->loc();
+        if (check(TokenKind::LeftBracket)) {
+            consume(TokenKind::LeftBracket);
+            std::unique_ptr<Expr> index = parse_expr();
+            consume(TokenKind::RightBracket);
+            expr = std::make_unique<IndexExpr>(loc, std::move(expr), std::move(index));
+            continue;
+        }
 
-        /* Function call */
         if (check(TokenKind::LeftParenthesis)) {
             consume(TokenKind::LeftParenthesis);
             std::unique_ptr<CallExpr> call = std::make_unique<CallExpr>(loc, std::move(expr));
             if (!check(TokenKind::RightParenthesis)) {
                 while (true) {
                     call->add(parse_assign_expr());
-                    if (!check(TokenKind::Comma))
-                        break;
-
+                    if (!check(TokenKind::Comma)) break;
                     consume(TokenKind::Comma);
                 }
             }
@@ -162,39 +201,26 @@ std::unique_ptr<Expr> Parser::parse_postfix_expr() {
             continue;
         }
 
-        /* Array indexing */
-        if (check(TokenKind::LeftBracket)) {
-            consume(TokenKind::LeftBracket);
-            std::unique_ptr<Expr> index = parse_expr();
-            consume(TokenKind::RightBracket);
-            expr = std::make_unique<IndexExpr>(loc, std::move(expr), std::move(index));
-            continue;
-        }
-
-        /* Struct member */
         if (check(TokenKind::Dot)) {
             consume(TokenKind::Dot);
             Token member = consume(TokenKind::Identifier);
-            expr = std::make_unique<MemberExpr>(loc, std::move(expr), member.lexeme, false);
+            expr = std::make_unique<MemberExpr>(loc, std::move(expr), std::move(member.lexeme), false);
             continue;
         }
 
-        /* Pointer-to-struct member */
         if (check(TokenKind::Arrow)) {
             consume(TokenKind::Arrow);
             Token member = consume(TokenKind::Identifier);
-            expr = std::make_unique<MemberExpr>(loc, std::move(expr), member.lexeme, true);
+            expr = std::make_unique<MemberExpr>(loc, std::move(expr), std::move(member.lexeme), true);
             continue;
         }
 
-        /* Postfix ++ */
         if (check(TokenKind::PlusPlus)) {
             consume(TokenKind::PlusPlus);
             expr = std::make_unique<UnExpr>(loc, UnOp::PostIncrement, std::move(expr));
             continue;
         }
 
-        /* Postfix -- */
         if (check(TokenKind::MinusMinus)) {
             consume(TokenKind::MinusMinus);
             expr = std::make_unique<UnExpr>(loc, UnOp::PostDecrement, std::move(expr));
@@ -208,16 +234,19 @@ std::unique_ptr<Expr> Parser::parse_postfix_expr() {
 }
 
 std::unique_ptr<Expr> Parser::parse_primary_expr() {
+    if (check(TokenKind::Character)) {
+        Token token = consume(TokenKind::Character);
+        return std::make_unique<CharExpr>(token.loc, token.lexeme);
+    }
+
+    if (check(TokenKind::String)) {
+        Token token = consume(TokenKind::String);
+        return std::make_unique<StringExpr>(token.loc, token.lexeme);
+    }
+
     if (check(TokenKind::Integer)) {
         Token token = consume(TokenKind::Integer);
-        long val;
-        try {
-            val = std::stol(token.lexeme);
-        } catch (...) {
-            std::fprintf(stderr, "%zu:%zu: error: integer '%s' out of range\n", token.loc.line, token.loc.col, token.lexeme.c_str());
-            std::exit(1);
-        }
-
+        long val = std::stol(token.lexeme);
         return std::make_unique<IntExpr>(token.loc, val);
     }
 
@@ -233,9 +262,7 @@ std::unique_ptr<Expr> Parser::parse_primary_expr() {
         return expr;
     }
 
-    Token& token = peek();
-    std::fprintf(stderr, "%zu:%zu: error: expected expression, got '%s'\n", token.loc.line, token.loc.col, token.lexeme.c_str());
-    std::exit(1);
+    error("expected expression");
 }
 
 /* --------------------------------------------------
@@ -243,47 +270,36 @@ std::unique_ptr<Expr> Parser::parse_primary_expr() {
  * -------------------------------------------------- */
 
 std::unique_ptr<Stmt> Parser::parse_stmt() {
-    if (check(TokenKind::Return))
-        return parse_ret_stmt();
-
-    if (check(TokenKind::LeftBrace))
-        return parse_compound_stmt();
-
-    if (check(TokenKind::If))
-        return parse_if_stmt();
-
-    if (check(TokenKind::While))
-        return parse_while_stmt();
-
-    if (check(TokenKind::Break))
-        return parse_break_stmt();
-
-    if (check(TokenKind::Continue))
-        return parse_continue_stmt();
-
-    return parse_expr_stmt();
+    switch (peek().kind) {
+        case TokenKind::LeftBrace: return parse_compound_stmt();
+        case TokenKind::If:        return parse_if_stmt();
+        case TokenKind::While:     return parse_while_stmt();
+        case TokenKind::For:       return parse_for_stmt();
+        case TokenKind::Switch:    return parse_switch_stmt();
+        case TokenKind::Case:      return parse_case_stmt();
+        case TokenKind::Default:   return parse_default_stmt();
+        case TokenKind::Break:     return parse_break_stmt();
+        case TokenKind::Continue:  return parse_continue_stmt();
+        case TokenKind::Return:    return parse_ret_stmt();
+        default:                   return parse_expr_stmt();
+    }
 }
 
 std::unique_ptr<RetStmt> Parser::parse_ret_stmt() {
-    struct Location loc = lookahead_[0].loc;
-    consume(TokenKind::Return);
-    std::unique_ptr<Expr> expr;
-    if (!check(TokenKind::Semicolon))
-        expr = parse_expr();
-
+    Token keyword = consume(TokenKind::Return);
+    std::unique_ptr<Expr> val;
+    if (!check(TokenKind::Semicolon)) val = parse_expr();
     consume(TokenKind::Semicolon);
-    return std::make_unique<RetStmt>(loc, std::move(expr));
+    return std::make_unique<RetStmt>(keyword.loc, std::move(val));
 }
 
 std::unique_ptr<CompoundStmt> Parser::parse_compound_stmt() {
-    struct Location loc = lookahead_[0].loc;
-    consume(TokenKind::LeftBrace);
-    std::unique_ptr<CompoundStmt> stmt = std::make_unique<CompoundStmt>(loc);
+    Token brace = consume(TokenKind::LeftBrace);
+    std::unique_ptr<CompoundStmt> stmt = std::make_unique<CompoundStmt>(brace.loc);
     while (!check(TokenKind::RightBrace)) {
-        if (decl())
-            stmt->add(parse_decl());
-        else
-            stmt->add(parse_stmt());
+        if (check(TokenKind::EndOfFile)) error("expected '}'");
+        if (istype()) parse_block_decl(*stmt);
+        else          stmt->add(parse_stmt());
     }
 
     consume(TokenKind::RightBrace);
@@ -291,47 +307,91 @@ std::unique_ptr<CompoundStmt> Parser::parse_compound_stmt() {
 }
 
 std::unique_ptr<IfStmt> Parser::parse_if_stmt() {
-    struct Location loc = lookahead_[0].loc;
-    consume(TokenKind::If);
+    Token keyword = consume(TokenKind::If);
     consume(TokenKind::LeftParenthesis);
     std::unique_ptr<Expr> cond = parse_expr();
     consume(TokenKind::RightParenthesis);
     std::unique_ptr<Stmt> then_branch = parse_stmt();
     std::unique_ptr<Stmt> else_branch;
     if (check(TokenKind::Else)) {
-        advance();
+        consume(TokenKind::Else);
         else_branch = parse_stmt();
     }
 
-    return std::make_unique<IfStmt>(loc, std::move(cond), std::move(then_branch), std::move(else_branch));
-}   
+    return std::make_unique<IfStmt>(keyword.loc, std::move(cond), std::move(then_branch), std::move(else_branch));
+}
 
 std::unique_ptr<WhileStmt> Parser::parse_while_stmt() {
-    struct Location loc = lookahead_[0].loc;
-    consume(TokenKind::While);
+    Token keyword = consume(TokenKind::While);
     consume(TokenKind::LeftParenthesis);
     std::unique_ptr<Expr> cond = parse_expr();
     consume(TokenKind::RightParenthesis);
     std::unique_ptr<Stmt> body = parse_stmt();
-    return std::make_unique<WhileStmt>(loc, std::move(cond), std::move(body));
+    return std::make_unique<WhileStmt>(keyword.loc, std::move(cond), std::move(body));
+}
+
+std::unique_ptr<ForStmt> Parser::parse_for_stmt() {
+    Token keyword = consume(TokenKind::For);
+    consume(TokenKind::LeftParenthesis);
+    std::vector<std::unique_ptr<VarDecl>> init_decls;
+    std::unique_ptr<Expr> init_expr;
+    if (!check(TokenKind::Semicolon)) {
+        if (istype()) {
+            Type base = parse_type_base();
+            Declarator first = parse_declarator(base);
+            init_decls = parse_var_decl(std::move(base), std::move(first), false);
+        } else init_expr = parse_expr();
+    }
+
+    consume(TokenKind::Semicolon);
+    std::unique_ptr<Expr> cond;
+    if (!check(TokenKind::Semicolon)) cond = parse_expr();
+    consume(TokenKind::Semicolon);
+    std::unique_ptr<Expr> step;
+    if (!check(TokenKind::RightParenthesis)) step = parse_expr();
+    consume(TokenKind::RightParenthesis);
+    std::unique_ptr<Stmt> body = parse_stmt();
+    return std::make_unique<ForStmt>(keyword.loc, std::move(init_decls), std::move(init_expr), std::move(cond), std::move(step), std::move(body));
+}
+
+std::unique_ptr<SwitchStmt> Parser::parse_switch_stmt() {
+    Token keyword = consume(TokenKind::Switch);
+    consume(TokenKind::LeftParenthesis);
+    std::unique_ptr<Expr> expr = parse_expr();
+    consume(TokenKind::RightParenthesis);
+    std::unique_ptr<Stmt> body = parse_stmt();
+    return std::make_unique<SwitchStmt>(keyword.loc, std::move(expr), std::move(body));
+}
+
+std::unique_ptr<CaseStmt> Parser::parse_case_stmt() {
+    Token keyword = consume(TokenKind::Case);
+    std::unique_ptr<Expr> val = parse_expr();
+    consume(TokenKind::Colon);
+    std::unique_ptr<Stmt> stmt = parse_stmt();
+    return std::make_unique<CaseStmt>(keyword.loc, std::move(val), std::move(stmt));
+}
+
+std::unique_ptr<DefaultStmt> Parser::parse_default_stmt() {
+    Token keyword = consume(TokenKind::Default);
+    consume(TokenKind::Colon);
+    std::unique_ptr<Stmt> stmt = parse_stmt();
+    return std::make_unique<DefaultStmt>(keyword.loc, std::move(stmt));
 }
 
 std::unique_ptr<BreakStmt> Parser::parse_break_stmt() {
-    struct Location loc = lookahead_[0].loc;
-    consume(TokenKind::Break);
+    Token keyword = consume(TokenKind::Break);
     consume(TokenKind::Semicolon);
-    return std::make_unique<BreakStmt>(loc);
+    return std::make_unique<BreakStmt>(keyword.loc);
 }
 
 std::unique_ptr<ContinueStmt> Parser::parse_continue_stmt() {
-    struct Location loc = lookahead_[0].loc;
-    consume(TokenKind::Continue);
+    Token keyword = consume(TokenKind::Continue);
     consume(TokenKind::Semicolon);
-    return std::make_unique<ContinueStmt>(loc);
+    return std::make_unique<ContinueStmt>(keyword.loc);
 }
 
 std::unique_ptr<ExprStmt> Parser::parse_expr_stmt() {
-    struct Location loc = lookahead_[0].loc;
+    Location loc = peek().loc;
     if (check(TokenKind::Semicolon)) {
         consume(TokenKind::Semicolon);
         return std::make_unique<ExprStmt>(loc, nullptr);
@@ -346,65 +406,101 @@ std::unique_ptr<ExprStmt> Parser::parse_expr_stmt() {
  * Declarations
  * -------------------------------------------------- */
 
-std::unique_ptr<Decl> Parser::parse_decl() {
-    if (check(TokenKind::Struct) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2))
-        return parse_struct_def();
-    
-    if (check(TokenKind::Enum) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2))
-        return parse_enum_def();
-
-    Type type = parse_type();
-    Token id = consume(TokenKind::Identifier);
-    if (check(TokenKind::LeftParenthesis))
-        return parse_function(id.loc, std::move(type), id.lexeme);
-    return parse_var_decl(id.loc, std::move(type), id.lexeme);
-}
-
-std::unique_ptr<VarDecl> Parser::parse_var_decl(struct Location loc, Type type, std::string id) {
-    /* Arrays */
-    while (check(TokenKind::LeftBracket)) {
-        consume(TokenKind::LeftBracket);
-        Token sz = consume(TokenKind::Integer);
-        type.dimensions.push_back(std::stoul(sz.lexeme));
-        consume(TokenKind::RightBracket);
+void Parser::parse_external_decl(Program& program) {
+    if (check(TokenKind::Struct) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2)) {
+        program.add(parse_struct_def());
+        return;
     }
 
-    /* "=" expr? */
-    std::unique_ptr<Expr> init;
-    if (check(TokenKind::Equal)) {
-        consume(TokenKind::Equal);
-        init = parse_expr();
+    if (check(TokenKind::Union) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2)) {
+        program.add(parse_union_def());
+        return;
     }
 
-    consume(TokenKind::Semicolon);
-    return std::make_unique<VarDecl>(loc, std::move(id), std::move(type), std::move(init));
+    if (check(TokenKind::Enum) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2)) {
+        program.add(parse_enum_def());
+        return;
+    }
+
+    Type base = parse_type_base();
+    Declarator decl = parse_declarator(base);
+    if (check(TokenKind::LeftParenthesis)) {
+        if (!decl.type.dimensions.empty()) error("expected non-array return type");
+        program.add(parse_function(std::move(decl)));
+        return;
+    }
+
+    std::vector<std::unique_ptr<VarDecl>> vars = parse_var_decl(std::move(base), std::move(decl), true);
+    for (std::unique_ptr<VarDecl>& var : vars) program.add(std::move(var));
 }
 
-std::unique_ptr<ParamDecl> Parser::parse_param_decl() {
-    Type type = parse_type();
-    Token id = consume(TokenKind::Identifier);
-    return std::make_unique<ParamDecl>(id.loc, std::move(type), id.lexeme);
+void Parser::parse_block_decl(CompoundStmt& block) {
+    if (check(TokenKind::Struct) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2)) {
+        block.add(parse_struct_def());
+        return;
+    }
+
+    if (check(TokenKind::Union) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2)) {
+        block.add(parse_union_def());
+        return;
+    }
+
+    if (check(TokenKind::Enum) && check(TokenKind::Identifier, 1) && check(TokenKind::LeftBrace, 2)) {
+        block.add(parse_enum_def());
+        return;
+    }
+
+    Type base = parse_type_base();
+    Declarator first = parse_declarator(base);
+    std::vector<std::unique_ptr<VarDecl>> vars = parse_var_decl(std::move(base), std::move(first), true);
+    for (std::unique_ptr<VarDecl>& var : vars) block.add(std::move(var));
 }
 
-std::unique_ptr<FunctionDecl> Parser::parse_function(struct Location loc, Type type, std::string id) {
-    std::unique_ptr<FunctionDecl> function = std::make_unique<FunctionDecl>(loc, type, id);
-    consume(TokenKind::LeftParenthesis);
+std::vector<std::unique_ptr<VarDecl>> Parser::parse_var_decl(Type base, Declarator first, bool semicolon) {
+    std::vector<std::unique_ptr<VarDecl>> vars;
+    Declarator decl = std::move(first);
+    while (true) {
+        std::unique_ptr<Expr> init;
+        if (check(TokenKind::Equal)) {
+            consume(TokenKind::Equal);
+            init = parse_assign_expr();
+        }
+
+        vars.push_back(std::make_unique<VarDecl>(decl.loc, std::move(decl.id), std::move(decl.type), std::move(init)));
+        if (!check(TokenKind::Comma)) break;
+        consume(TokenKind::Comma);
+        decl = parse_declarator(base);
+    }
+
+    if (semicolon) consume(TokenKind::Semicolon);
+    return vars;
+}
+
+std::unique_ptr<ParamDecl> Parser::parse_param() {
+    Type base = parse_type_base();
+    Declarator decl = parse_declarator(std::move(base));
+    return std::make_unique<ParamDecl>(decl.loc, std::move(decl.type), std::move(decl.id));
+}
+
+void Parser::parse_param_clause(FunctionDecl& function) {
+    if (check(TokenKind::RightParenthesis)) return;
+
     if (check(TokenKind::Void) && check(TokenKind::RightParenthesis, 1)) {
-        /* Edge case: "void" ")" */
         consume(TokenKind::Void);
-        goto end;
+        return;
     }
 
-    while (!check(TokenKind::RightParenthesis)) {
-        function->add(parse_param_decl());
-
-        if (!check(TokenKind::Comma))
-            break;
-
+    while (true) {
+        function.add(parse_param());
+        if (!check(TokenKind::Comma)) break;
         consume(TokenKind::Comma);
     }
+}
 
-end:
+std::unique_ptr<FunctionDecl> Parser::parse_function(Declarator decl) {
+    std::unique_ptr<FunctionDecl> function = std::make_unique<FunctionDecl>(decl.loc, std::move(decl.type), std::move(decl.id));
+    consume(TokenKind::LeftParenthesis);
+    parse_param_clause(*function);
     consume(TokenKind::RightParenthesis);
     if (check(TokenKind::Semicolon)) {
         consume(TokenKind::Semicolon);
@@ -416,15 +512,19 @@ end:
         return function;
     }
 
-    std::fprintf(stderr, "%zu:%zu: error: expected ';' or '{' after function declaration\n", lookahead_[0].loc.line, lookahead_[0].loc.col);
-    std::exit(1);
+    error("expected ';' or function body");
 }
 
-std::unique_ptr<FieldDecl> Parser::parse_field_decl() {
-    Type type = parse_type();
-    Token id = consume(TokenKind::Identifier);
+void Parser::parse_struct_members(StructDecl& decl) {
+    Type base = parse_type_base();
+    while (true) {
+        Declarator field = parse_declarator(base);
+        decl.add(std::make_unique<FieldDecl>(field.loc, std::move(field.type), std::move(field.id)));
+        if (!check(TokenKind::Comma)) break;
+        consume(TokenKind::Comma);
+    }
+
     consume(TokenKind::Semicolon);
-    return std::make_unique<FieldDecl>(id.loc, std::move(type), id.lexeme);
 }
 
 std::unique_ptr<StructDecl> Parser::parse_struct_def() {
@@ -432,9 +532,32 @@ std::unique_ptr<StructDecl> Parser::parse_struct_def() {
     Token id = consume(TokenKind::Identifier);
     std::unique_ptr<StructDecl> decl = std::make_unique<StructDecl>(keyword.loc, id.lexeme);
     consume(TokenKind::LeftBrace);
-    while (!check(TokenKind::RightBrace))
-        decl->add(parse_field_decl());
+    if (check(TokenKind::RightBrace)) error("expected struct member");
+    while (!check(TokenKind::RightBrace)) parse_struct_members(*decl);
+    consume(TokenKind::RightBrace);
+    consume(TokenKind::Semicolon);
+    return decl;
+}
 
+void Parser::parse_union_members(UnionDecl& decl) {
+    Type base = parse_type_base();
+    while (true) {
+        Declarator field = parse_declarator(base);
+        decl.add(std::make_unique<FieldDecl>(field.loc, std::move(field.type), std::move(field.id)));
+        if (!check(TokenKind::Comma)) break;
+        consume(TokenKind::Comma);
+    }
+
+    consume(TokenKind::Semicolon);
+}
+
+std::unique_ptr<UnionDecl> Parser::parse_union_def() {
+    Token keyword = consume(TokenKind::Union);
+    Token id = consume(TokenKind::Identifier);
+    std::unique_ptr<UnionDecl> decl = std::make_unique<UnionDecl>(keyword.loc, id.lexeme);
+    consume(TokenKind::LeftBrace);
+    if (check(TokenKind::RightBrace)) error("expected union member");
+    while (!check(TokenKind::RightBrace)) parse_union_members(*decl);
     consume(TokenKind::RightBrace);
     consume(TokenKind::Semicolon);
     return decl;
@@ -454,14 +577,13 @@ std::unique_ptr<EnumeratorDecl> Parser::parse_enumerator() {
 std::unique_ptr<EnumDecl> Parser::parse_enum_def() {
     Token keyword = consume(TokenKind::Enum);
     Token id = consume(TokenKind::Identifier);
-    consume(TokenKind::LeftBrace);
     std::unique_ptr<EnumDecl> decl = std::make_unique<EnumDecl>(keyword.loc, id.lexeme);
-    while (!check(TokenKind::RightBrace)) {
-        decl->add(parse_enumerator());
-        if (!check(TokenKind::Comma))
-            break;
-
+    consume(TokenKind::LeftBrace);
+    decl->add(parse_enumerator());
+    while (check(TokenKind::Comma)) {
         consume(TokenKind::Comma);
+        if (check(TokenKind::RightBrace)) break;
+        decl->add(parse_enumerator());
     }
 
     consume(TokenKind::RightBrace);
@@ -475,70 +597,108 @@ std::unique_ptr<EnumDecl> Parser::parse_enum_def() {
 
 int Parser::precedence(TokenKind kind) {
     switch (kind) {
-        /* Arithmetic operators */
-        case TokenKind::Minus:              return 9;
-        case TokenKind::Percent:            return 10;
-        case TokenKind::Plus:               return 9;
-        case TokenKind::Slash:              return 10;
-        case TokenKind::Star:               return 10;
-
-        /* Comparison operators */
-        case TokenKind::BangEqual:
-        case TokenKind::EqualEqual:         return 6;
-        case TokenKind::Greater:
-        case TokenKind::GreaterEqual:
-        case TokenKind::Less:
-        case TokenKind::LessEqual:          return 7;
-
-        /* Logical operators */
-        case TokenKind::AmpersandAmpersand: return 2;
         case TokenKind::PipePipe:           return 1;
-
-        /* Bitwise operators */
-        case TokenKind::Ampersand:          return 5;
-        case TokenKind::Caret:              return 4;
+        case TokenKind::AmpersandAmpersand: return 2;
         case TokenKind::Pipe:               return 3;
-
-        /* Shift operators */
-        case TokenKind::GreaterGreater:
-        case TokenKind::LessLess:           return 8;
-
+        case TokenKind::Caret:              return 4;
+        case TokenKind::Ampersand:          return 5;
+        case TokenKind::EqualEqual:
+        case TokenKind::BangEqual:          return 6;
+        case TokenKind::Less:
+        case TokenKind::LessEqual:
+        case TokenKind::Greater:
+        case TokenKind::GreaterEqual:       return 7;
+        case TokenKind::LessLess:
+        case TokenKind::GreaterGreater:     return 8;
+        case TokenKind::Plus:
+        case TokenKind::Minus:              return 9;
+        case TokenKind::Star:
+        case TokenKind::Slash:
+        case TokenKind::Percent:            return 10;
         default:                            return 0;
     }
 }
 
 BinOp Parser::binop(TokenKind kind) {
     switch (kind) {
-        /* Arithmetic operators */
-        case TokenKind::Minus:              return BinOp::Subtract;
-        case TokenKind::Percent:            return BinOp::Modulo;
         case TokenKind::Plus:               return BinOp::Add;
-        case TokenKind::Slash:              return BinOp::Divide;
+        case TokenKind::Minus:              return BinOp::Subtract;
         case TokenKind::Star:               return BinOp::Multiply;
-
-        /* Comparison operators */
-        case TokenKind::BangEqual:          return BinOp::NotEqual;
-        case TokenKind::EqualEqual:         return BinOp::Equal;
-        case TokenKind::Greater:            return BinOp::Greater;
-        case TokenKind::GreaterEqual:       return BinOp::GreaterEqual;
+        case TokenKind::Slash:              return BinOp::Divide;
+        case TokenKind::Percent:            return BinOp::Modulo;
+        case TokenKind::LessLess:           return BinOp::ShiftLeft;
+        case TokenKind::GreaterGreater:     return BinOp::ShiftRight;
         case TokenKind::Less:               return BinOp::Less;
         case TokenKind::LessEqual:          return BinOp::LessEqual;
-
-        /* Logical operators */
-        case TokenKind::AmpersandAmpersand: return BinOp::LogicalAnd;
-        case TokenKind::PipePipe:           return BinOp::LogicalOr;
-
-        /* Bitwise operators */
+        case TokenKind::Greater:            return BinOp::Greater;
+        case TokenKind::GreaterEqual:       return BinOp::GreaterEqual;
+        case TokenKind::EqualEqual:         return BinOp::Equal;
+        case TokenKind::BangEqual:          return BinOp::NotEqual;
         case TokenKind::Ampersand:          return BinOp::BitAnd;
         case TokenKind::Caret:              return BinOp::BitXor;
         case TokenKind::Pipe:               return BinOp::BitOr;
-
-        /* Shift operators */
-        case TokenKind::GreaterGreater:     return BinOp::ShiftRight;
-        case TokenKind::LessLess:           return BinOp::ShiftLeft;
-
+        case TokenKind::AmpersandAmpersand: return BinOp::LogicalAnd;
+        case TokenKind::PipePipe:           return BinOp::LogicalOr;
         default:                            std::abort();
     }
+}
+
+bool Parser::isassignop(TokenKind kind) {
+    switch (kind) {
+        case TokenKind::Equal:
+        case TokenKind::PlusEqual:
+        case TokenKind::MinusEqual:
+        case TokenKind::StarEqual:
+        case TokenKind::SlashEqual:
+        case TokenKind::PercentEqual:
+        case TokenKind::LessLessEqual:
+        case TokenKind::GreaterGreaterEqual:
+        case TokenKind::AmpersandEqual:
+        case TokenKind::CaretEqual:
+        case TokenKind::PipeEqual: return true;
+        default:                   return false;
+    }
+}
+
+AssignOp Parser::assignop(TokenKind kind) {
+    switch (kind) {
+        case TokenKind::Equal:               return AssignOp::Assign;
+        case TokenKind::PlusEqual:           return AssignOp::AddAssign;
+        case TokenKind::MinusEqual:          return AssignOp::SubAssign;
+        case TokenKind::StarEqual:           return AssignOp::MulAssign;
+        case TokenKind::SlashEqual:          return AssignOp::DivAssign;
+        case TokenKind::PercentEqual:        return AssignOp::ModAssign;
+        case TokenKind::LessLessEqual:       return AssignOp::LeftShiftAssign;
+        case TokenKind::GreaterGreaterEqual: return AssignOp::RightShiftAssign;
+        case TokenKind::AmpersandEqual:      return AssignOp::AndAssign;
+        case TokenKind::CaretEqual:          return AssignOp::XorAssign;
+        case TokenKind::PipeEqual:           return AssignOp::OrAssign;
+        default:                             std::abort();
+    }
+}
+
+bool Parser::istype(std::size_t offset) {
+    TokenKind kind = peek(offset).kind;
+    return kind == TokenKind::Void   ||
+           kind == TokenKind::Char   ||
+           kind == TokenKind::Int    ||
+           kind == TokenKind::Long   ||
+           kind == TokenKind::Struct ||
+           kind == TokenKind::Union  ||
+           kind == TokenKind::Enum;
+}
+
+bool Parser::cast() {
+    return check(TokenKind::LeftParenthesis) && istype(1);
+}
+
+bool Parser::check(TokenKind kind, std::size_t offset) {
+    return peek(offset).kind == kind;
+}
+
+Token& Parser::peek(std::size_t offset) {
+    if (offset >= lookahead_.size()) std::abort();
+    return lookahead_[offset];
 }
 
 void Parser::advance() {
@@ -547,34 +707,18 @@ void Parser::advance() {
     lookahead_[2] = lexer_.next();
 }
 
-bool Parser::decl() {
-    return check(TokenKind::Int)
-        || check(TokenKind::Char)
-        || check(TokenKind::Long)
-        || check(TokenKind::Void)
-        || check(TokenKind::Struct)
-        || check(TokenKind::Union)
-        || check(TokenKind::Enum);
-}
-
-bool Parser::check(TokenKind kind, std::size_t offset) {
-    return peek(offset).kind == kind;
-}
-
-Token& Parser::peek(std::size_t offset) {
-    if (offset >= lookahead_.size())
-        std::abort();
-
-    return lookahead_[offset];
-}
-
 Token Parser::consume(TokenKind kind) {
     if (!check(kind)) {
-        std::fprintf(stderr, "%zu:%zu: error: unexpected token '%s'\n", lookahead_[0].loc.line, lookahead_[0].loc.col, lookahead_[0].lexeme.c_str());
+        std::fprintf(stderr, "%zu:%zu: error: unexpected token '%s', expected %s\n", peek().loc.line, peek().loc.col, peek().lexeme.c_str(), describe(kind).c_str());
         std::exit(1);
     }
 
-    Token cur = lookahead_[0];
+    Token token = std::move(lookahead_[0]);
     advance();
-    return cur;
+    return token;
+}
+
+[[noreturn]] void Parser::error(const char* msg) {
+    std::fprintf(stderr, "%zu:%zu: error: %s, got '%s'\n", peek().loc.line, peek().loc.col, msg, peek().lexeme.c_str());
+    std::exit(1);
 }

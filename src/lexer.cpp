@@ -158,13 +158,11 @@ void Lexer::handle_blank() {
             continue;
         }
 
-        /* Comments of the form // ... */
         if (c == '/' && peek(1) == '/') {
             while (!eof() && peek() != '\n') advance();
             continue;
         }
 
-        /* Comments of the form /* ... */ */
         if (c == '/' && peek(1) == '*') {
             struct Location loc = loc_;
             advance();
@@ -214,7 +212,7 @@ Token Lexer::handle_quote(char quote) {
     std::size_t start = loc_.offset;
     struct Location loc{start, loc_.line, loc_.col};
     TokenKind kind = (quote == '\'') ? TokenKind::Character : TokenKind::String;
-    char *what = (quote == '\'') ? "character" : "string";
+    const char *what = (quote == '\'') ? "character" : "string";
     advance();
     std::size_t len = 0;
     while (!eof() && peek() != quote && peek() != '\n') {

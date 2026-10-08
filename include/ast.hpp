@@ -12,21 +12,28 @@
  * -------------------------------------------------- */
 
 enum class TypeKind {
-    Char,
-    Enum,
-    Int,
-    Long,
-    Struct,
-    Union,
-    Void
+    Char,   /* "char"   */
+    Enum,   /* "enum"   */
+    Int,    /* "int"    */
+    Long,   /* "long"   */
+    Struct, /* "struct" */
+    Union,  /* "union"  */
+    Void,   /* "void"   */
 };
 
 class Type {
 public:
-    TypeKind                 kind;
-    std::string              tag;
-    std::size_t              depth;
-    std::vector<std::size_t> dimensions;
+    TypeKind                 kind;       /* The type kind, e.g. TypeKind::Struct for structs   */
+    std::string              tag;        /* The type tag, e.g. "foo" for "struct foo"          */
+    std::size_t              depth;      /* The type depth, e.g. 2 for int**                   */
+    std::vector<std::size_t> dimensions; /* The type dimensions, e.g. {10, 20} for 10x20 array */
+};
+
+class Declarator {
+public:
+    struct Location loc;
+    std::string     id;
+    Type            type;
 };
 
 /* --------------------------------------------------
@@ -63,6 +70,24 @@ public:
     virtual ~Expr() = default;
 };
 
+class CharExpr : public Expr {
+public:
+    CharExpr(struct Location loc, std::string val);
+    std::string& val();
+
+private:
+    std::string val_;
+};
+
+class StringExpr : public Expr {
+public:
+    StringExpr(struct Location loc, std::string val);
+    std::string& val();
+
+private:
+    std::string val_;
+};
+
 class IntExpr : public Expr {
 public:
     IntExpr(struct Location loc, long val);
@@ -81,29 +106,54 @@ private:
     std::string id_;
 };
 
+class SizeofExpr : public Expr {
+public:
+    SizeofExpr(struct Location loc, std::unique_ptr<Expr> operand);
+
+private:
+    std::unique_ptr<Expr> operand_;
+};
+
+class SizeofTypeExpr : public Expr {
+public:
+    SizeofTypeExpr(struct Location loc, Type type);
+
+private:
+    Type type_;
+};
+
+class CastExpr : public Expr {
+public:
+    CastExpr(struct Location loc, Type type, std::unique_ptr<Expr> operand);
+
+private:
+    Type type_;
+    std::unique_ptr<Expr> operand_;
+};
+
 enum class BinOp {
-    Add,
-    Divide,
-    Modulo,
-    Multiply,
-    Subtract,
+    Add,          /* "+"  */
+    Divide,       /* "/"  */
+    Modulo,       /* "%"  */
+    Multiply,     /* "*"  */
+    Subtract,     /* "-"  */
 
-    Equal,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-    NotEqual,
+    Equal,        /* "==" */
+    Greater,      /* ">"  */
+    GreaterEqual, /* ">=" */
+    Less,         /* "<"  */
+    LessEqual,    /* "<=" */
+    NotEqual,     /* "!=" */
 
-    LogicalAnd,
-    LogicalOr,
+    LogicalAnd,   /* "&&" */
+    LogicalOr,    /* "||" */
 
-    BitAnd,
-    BitOr,
-    BitXor,
+    BitAnd,       /* "&"  */
+    BitOr,        /* "|"  */
+    BitXor,       /* "^"  */
 
-    ShiftLeft,
-    ShiftRight
+    ShiftLeft,    /* "<<" */
+    ShiftRight,   /* ">>" */
 };
 
 class BinExpr : public Expr {
@@ -120,16 +170,16 @@ private:
 };
 
 enum class UnOp {
-    AddressOf,
-    BitNot,
-    Dereference,
-    LogicalNot,
-    Negate,
-    Plus,
-    PostDecrement,
-    PostIncrement,
-    PreDecrement,
-    PreIncrement
+    AddressOf,     /* "&"  */
+    BitNot,        /* "~"  */
+    Dereference,   /* "*"  */
+    LogicalNot,    /* "!"  */
+    Negate,        /* "-"  */
+    Plus,          /* "+"  */
+    PostDecrement, /* "--" */
+    PostIncrement, /* "++" */
+    PreDecrement,  /* "--" */
+    PreIncrement,  /* "++" */
 };
 
 class UnExpr : public Expr {
@@ -142,12 +192,17 @@ private:
 };
 
 enum class AssignOp {
-    AddAssign,
-    Assign,
-    DivAssign,
-    ModAssign,
-    MulAssign,
-    SubAssign
+    AddAssign,        /* "+="  */
+    AndAssign,        /* "&="  */
+    Assign,           /* "="   */
+    DivAssign,        /* "/="  */
+    LeftShiftAssign,  /* "<<=" */
+    ModAssign,        /* "%="  */
+    MulAssign,        /* "*="  */
+    OrAssign,         /* "|="  */
+    RightShiftAssign, /* ">>=" */
+    SubAssign,        /* "-="  */
+    XorAssign,        /* "^="  */
 };
 
 class AssignExpr : public Expr {
@@ -193,6 +248,8 @@ private:
  * Statement nodes
  * -------------------------------------------------- */
 
+class VarDecl;
+
 class Stmt : public BlockEntry {
 public:
     Stmt(struct Location loc);
@@ -224,6 +281,44 @@ private:
     std::unique_ptr<Expr> cond_;
     std::unique_ptr<Stmt> then_branch_;
     std::unique_ptr<Stmt> else_branch_;
+};
+
+class SwitchStmt : public Stmt {
+public:
+    SwitchStmt(struct Location loc, std::unique_ptr<Expr> expr, std::unique_ptr<Stmt> body);
+
+private:
+    std::unique_ptr<Expr> expr_;
+    std::unique_ptr<Stmt> body_;
+};
+
+class CaseStmt : public Stmt {
+public:
+    CaseStmt(struct Location loc, std::unique_ptr<Expr> val, std::unique_ptr<Stmt> stmt);
+
+private:
+    std::unique_ptr<Expr> val_;
+    std::unique_ptr<Stmt> stmt_;
+};
+
+class DefaultStmt : public Stmt {
+public:
+    DefaultStmt(struct Location loc, std::unique_ptr<Stmt> stmt);
+
+private:
+    std::unique_ptr<Stmt> stmt_;
+};
+
+class ForStmt : public Stmt {
+public:
+    ForStmt(struct Location loc, std::vector<std::unique_ptr<VarDecl>> decls, std::unique_ptr<Expr> init, std::unique_ptr<Expr> cond, std::unique_ptr<Expr> step, std::unique_ptr<Stmt> body);
+
+private:
+    std::vector<std::unique_ptr<VarDecl>> decls_;
+    std::unique_ptr<Expr>                 init_;
+    std::unique_ptr<Expr>                 cond_;
+    std::unique_ptr<Expr>                 step_;
+    std::unique_ptr<Stmt>                 body_;
 };
 
 class WhileStmt : public Stmt {
@@ -308,6 +403,16 @@ private:
 class StructDecl : public Decl {
 public:
     StructDecl(struct Location loc, std::string id);
+    void add(std::unique_ptr<FieldDecl> field);
+
+private:
+    std::string                             id_;
+    std::vector<std::unique_ptr<FieldDecl>> fields_;
+};
+
+class UnionDecl : public Decl {
+public:
+    UnionDecl(struct Location loc, std::string id);
     void add(std::unique_ptr<FieldDecl> field);
 
 private:
