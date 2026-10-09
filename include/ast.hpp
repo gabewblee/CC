@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,10 +13,12 @@
  * -------------------------------------------------- */
 
 enum class TypeKind {
+    Array,
     Char,   /* "char"   */
     Enum,   /* "enum"   */
     Int,    /* "int"    */
     Long,   /* "long"   */
+    Pointer,
     Struct, /* "struct" */
     Union,  /* "union"  */
     Void,   /* "void"   */
@@ -23,10 +26,14 @@ enum class TypeKind {
 
 class Type {
 public:
-    TypeKind                 kind;       /* The type kind, e.g. TypeKind::Struct for structs   */
-    std::string              tag;        /* The type tag, e.g. "foo" for "struct foo"          */
-    std::size_t              depth;      /* The type depth, e.g. 2 for int**                   */
-    std::vector<std::size_t> dimensions; /* The type dimensions, e.g. {10, 20} for 10x20 array */
+    TypeKind              kind;
+    std::shared_ptr<Type> base;
+    std::size_t           nelemns;
+    std::string           tag;
+    
+    explicit Type(TypeKind kind);
+    static Type mk_ptr_to(Type base);
+    static Type mk_array_of(Type base, std::size_t sz);
 };
 
 class Declarator {

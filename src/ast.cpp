@@ -1,6 +1,27 @@
 #include "../include/ast.hpp"
 
 /* --------------------------------------------------
+ * Types
+ * -------------------------------------------------- */
+
+Type::Type(TypeKind kind) : kind(kind), base(nullptr), nelemns(0) {
+
+}
+
+Type Type::mk_ptr_to(Type base) {
+    Type type(TypeKind::Pointer);
+    type.base = std::make_shared<Type>(std::move(base));
+    return type;
+}
+
+Type Type::mk_array_of(Type base, std::size_t sz) {
+    Type type(TypeKind::Array);
+    type.base    = std::make_shared<Type>(std::move(base));
+    type.nelemns = sz;
+    return type;
+}
+
+/* --------------------------------------------------
  * Node
  * -------------------------------------------------- */
 

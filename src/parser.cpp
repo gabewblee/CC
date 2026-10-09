@@ -26,44 +26,22 @@ std::unique_ptr<Program> Parser::parse() {
  * -------------------------------------------------- */
 
 Type Parser::parse_type_base() {
-    Type type{};
-    type.depth = 0;
-    switch (peek().kind) {
-        case TokenKind::Void:
-            consume(TokenKind::Void);
-            type.kind = TypeKind::Void;
-            break;
-        case TokenKind::Char:
-            consume(TokenKind::Char);
-            type.kind = TypeKind::Char;
-            break;
-        case TokenKind::Int:
-            consume(TokenKind::Int);
-            type.kind = TypeKind::Int;
-            break;
-        case TokenKind::Long:
-            consume(TokenKind::Long);
-            type.kind = TypeKind::Long;
-            break;
-        case TokenKind::Struct:
-            consume(TokenKind::Struct);
-            type.kind = TypeKind::Struct;
-            type.tag = consume(TokenKind::Identifier).lexeme;
-            break;
-        case TokenKind::Union:
-            consume(TokenKind::Union);
-            type.kind = TypeKind::Union;
-            type.tag = consume(TokenKind::Identifier).lexeme;
-            break;
-        case TokenKind::Enum:
-            consume(TokenKind::Enum);
-            type.kind = TypeKind::Enum;
-            type.tag = consume(TokenKind::Identifier).lexeme;
-            break;
-        default:
-            error("expected type");
+    Token token = peek();
+    TypeKind kind;
+    switch (token.kind) {
+        case TokenKind::Void:   kind = TypeKind::Void;   break;
+        case TokenKind::Char:   kind = TypeKind::Char;   break;
+        case TokenKind::Int:    kind = TypeKind::Int;    break;
+        case TokenKind::Long:   kind = TypeKind::Long;   break;
+        case TokenKind::Struct: kind = TypeKind::Struct; break;
+        case TokenKind::Union:  kind = TypeKind::Union;  break;
+        case TokenKind::Enum:   kind = TypeKind::Enum;   break;
+        default:                error("expected type");
     }
     
+    consume(token.kind);
+    Type type(kind);
+    if (kind == TypeKind::Struct || kind == TypeKind::Union || kind == TypeKind::Enum) type.tag = consume(TokenKind::Identifier).lexeme;
     return type;
 }
 
@@ -71,7 +49,7 @@ Type Parser::parse_type() {
     Type type = parse_type_base();
     while (check(TokenKind::Star)) {
         consume(TokenKind::Star);
-        type.depth++;
+        type = Type::mk_ptr_to(std::move(type));
     }
 
     parse_array_suffix(type);
@@ -79,24 +57,26 @@ Type Parser::parse_type() {
 }
 
 Declarator Parser::parse_declarator(Type base) {
-    Type type = std::move(base);
     while (check(TokenKind::Star)) {
         consume(TokenKind::Star);
-        type.depth++;
+        base = Type::mk_ptr_to(std::move(base));
     }
 
     Token id = consume(TokenKind::Identifier);
-    parse_array_suffix(type);
-    return Declarator{id.loc, std::move(id.lexeme), std::move(type)};
+    parse_array_suffix(base);
+    return Declarator{id.loc, std::move(id.lexeme), std::move(base)};
 }
 
 void Parser::parse_array_suffix(Type& type) {
+    std::vector<std::size_t> dims;
     while (check(TokenKind::LeftBracket)) {
         consume(TokenKind::LeftBracket);
         Token sz = consume(TokenKind::Integer);
-        type.dimensions.push_back(std::stoul(sz.lexeme));
+        dims.push_back(std::stoul(sz.lexeme));
         consume(TokenKind::RightBracket);
     }
+
+    for (auto it = dims.rbegin(); it != dims.rend(); ++it) type = Type::mk_array_of(std::move(type), *it);
 }
 
 /* --------------------------------------------------
@@ -425,7 +405,7 @@ void Parser::parse_external_decl(Program& program) {
     Type base = parse_type_base();
     Declarator decl = parse_declarator(base);
     if (check(TokenKind::LeftParenthesis)) {
-        if (!decl.type.dimensions.empty()) error("expected non-array return type");
+        if (decl.type.kind == TypeKind::Array) error("expected non-array return type");
         program.add(parse_function(std::move(decl)));
         return;
     }
