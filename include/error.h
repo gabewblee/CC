@@ -15,6 +15,11 @@ typedef struct {
 } Location;
 
 /**
+ * oom() - Reports an out of memory error.
+ */
+void oom(void);
+
+/**
  * errorf() - Writes @format to stderr.
  * @format: The formatted string to write.
  * Returns: The number of characters written on success, negative otherwise.
