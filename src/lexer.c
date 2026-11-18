@@ -84,54 +84,54 @@ static Token handle_id(Lexer *lexer) {
 
     const char *lexeme = lexer->source + start.offset;
     size_t length = lexer->location.offset - start.offset;
-    TokenKind kind = Identifier;
+    TokenKind kind = TokenIdentifier;
     switch (lexeme[0]) {
         case '_':
-            if (same(lexeme, length, "_Bool")) kind = Bool;
+            if (same(lexeme, length, "_Bool")) kind = TokenBool;
             break;
         case 'b':
-            if (same(lexeme, length, "break")) kind = Break;
+            if (same(lexeme, length, "break")) kind = TokenBreak;
             break;
         case 'c':
-            if      (same(lexeme, length, "case"))     kind = Case;
-            else if (same(lexeme, length, "char"))     kind = Char;
-            else if (same(lexeme, length, "const"))    kind = Const;
-            else if (same(lexeme, length, "continue")) kind = Continue;
+            if      (same(lexeme, length, "case"))     kind = TokenCase;
+            else if (same(lexeme, length, "char"))     kind = TokenChar;
+            else if (same(lexeme, length, "const"))    kind = TokenConst;
+            else if (same(lexeme, length, "continue")) kind = TokenContinue;
             break;
         case 'd':
-            if (same(lexeme, length, "default")) kind = Default;
+            if (same(lexeme, length, "default")) kind = TokenDefault;
             break;
         case 'e':
-            if      (same(lexeme, length, "else"))   kind = Else;
-            else if (same(lexeme, length, "enum"))   kind = Enum;
-            else if (same(lexeme, length, "extern")) kind = Extern;
+            if      (same(lexeme, length, "else"))   kind = TokenElse;
+            else if (same(lexeme, length, "enum"))   kind = TokenEnum;
+            else if (same(lexeme, length, "extern")) kind = TokenExtern;
             break;
         case 'f':
-            if (same(lexeme, length, "for")) kind = For;
+            if (same(lexeme, length, "for")) kind = TokenFor;
             break;
         case 'i':
-            if      (same(lexeme, length, "if"))  kind = If;
-            else if (same(lexeme, length, "int")) kind = Int;
+            if      (same(lexeme, length, "if"))  kind = TokenIf;
+            else if (same(lexeme, length, "int")) kind = TokenInt;
             break;
         case 'r':
-            if (same(lexeme, length, "return")) kind = Return;
+            if (same(lexeme, length, "return")) kind = TokenReturn;
             break;
         case 's':
-            if      (same(lexeme, length, "sizeof")) kind = Sizeof;
-            else if (same(lexeme, length, "struct")) kind = Struct;
-            else if (same(lexeme, length, "switch")) kind = Switch;
+            if      (same(lexeme, length, "sizeof")) kind = TokenSizeof;
+            else if (same(lexeme, length, "struct")) kind = TokenStruct;
+            else if (same(lexeme, length, "switch")) kind = TokenSwitch;
             break;
         case 't':
-            if (same(lexeme, length, "typedef")) kind = Typedef;
+            if (same(lexeme, length, "typedef")) kind = TokenTypedef;
             break;
         case 'u':
-            if (same(lexeme, length, "union")) kind = Union;
+            if (same(lexeme, length, "union")) kind = TokenUnion;
             break;
         case 'v':
-            if (same(lexeme, length, "void")) kind = Void;
+            if (same(lexeme, length, "void")) kind = TokenVoid;
             break;
         case 'w':
-            if (same(lexeme, length, "while")) kind = While;
+            if (same(lexeme, length, "while")) kind = TokenWhile;
             break;
     }
 
@@ -146,13 +146,13 @@ static Token handle_digit(Lexer *lexer) {
         exit(EXIT_FAILURE);
     }
 
-    return token(lexer, start, Integer);
+    return token(lexer, start, TokenInteger);
 }
 
 Token lexer_next(Lexer *lexer) {
     handle_blank(lexer);
     if (eof(lexer))
-        return token(lexer, lexer->location, EndOfFile);
+        return token(lexer, lexer->location, TokenEndOfFile);
 
     char c = peek(lexer, 0);
     if (isalpha(c))
@@ -164,30 +164,30 @@ Token lexer_next(Lexer *lexer) {
     Location start = lexer->location;
     TokenKind kind;
     switch (advance(lexer)) {
-        case '&': kind = accept(lexer, '&') ? AmpersandAmpersand : Ampersand;                                     break;
-        case '!': kind = accept(lexer, '=') ? BangEqual          : Bang;                                          break;
-        case '^': kind = Caret;                                                                                   break;
-        case ':': kind = Colon;                                                                                   break;
-        case ',': kind = Comma;                                                                                   break;
-        case '.': kind = Dot;                                                                                     break;
-        case '=': kind = accept(lexer, '=') ? EqualEqual         : Equal;                                         break;
-        case '>': kind = accept(lexer, '=') ? GreaterEqual       : accept(lexer, '>') ? GreaterGreater : Greater; break;
-        case '{': kind = LeftBrace;                                                                               break;
-        case '[': kind = LeftBracket;                                                                             break;
-        case '(': kind = LeftParenthesis;                                                                         break;
-        case '<': kind = accept(lexer, '=') ? LessEqual          : accept(lexer, '<') ? LessLess       : Less;    break;
-        case '-': kind = accept(lexer, '>') ? Arrow              : accept(lexer, '=') ? MinusEqual     : Minus;   break;
-        case '%': kind = accept(lexer, '=') ? PercentEqual       : Percent;                                       break;
-        case '|': kind = accept(lexer, '|') ? PipePipe           : Pipe;                                          break;
-        case '+': kind = accept(lexer, '=') ? PlusEqual          : Plus;                                          break;
-        case '?': kind = Question;                                                                                break;
-        case '}': kind = RightBrace;                                                                              break;
-        case ']': kind = RightBracket;                                                                            break;
-        case ')': kind = RightParenthesis;                                                                        break;
-        case ';': kind = Semicolon;                                                                               break;
-        case '/': kind = accept(lexer, '=') ? SlashEqual         : Slash;                                         break;
-        case '*': kind = accept(lexer, '=') ? StarEqual          : Star;                                          break;
-        case '~': kind = Tilde;                                                                                   break;
+        case '&': kind = accept(lexer, '&') ? TokenAmpersandAmpersand : TokenAmpersand;                                          break;
+        case '!': kind = accept(lexer, '=') ? TokenBangEqual          : TokenBang;                                               break;
+        case '^': kind = TokenCaret;                                                                                             break;
+        case ':': kind = TokenColon;                                                                                             break;
+        case ',': kind = TokenComma;                                                                                             break;
+        case '.': kind = TokenDot;                                                                                               break;
+        case '=': kind = accept(lexer, '=') ? TokenEqualEqual         : TokenEqual;                                              break;
+        case '>': kind = accept(lexer, '=') ? TokenGreaterEqual       : accept(lexer, '>') ? TokenGreaterGreater : TokenGreater; break;
+        case '{': kind = TokenLeftBrace;                                                                                         break;
+        case '[': kind = TokenLeftBracket;                                                                                       break;
+        case '(': kind = TokenLeftParenthesis;                                                                                   break;
+        case '<': kind = accept(lexer, '=') ? TokenLessEqual          : accept(lexer, '<') ? TokenLessLess       : TokenLess;    break;
+        case '-': kind = accept(lexer, '>') ? TokenArrow              : accept(lexer, '=') ? TokenMinusEqual     : TokenMinus;   break;
+        case '%': kind = accept(lexer, '=') ? TokenPercentEqual       : TokenPercent;                                            break;
+        case '|': kind = accept(lexer, '|') ? TokenPipePipe           : TokenPipe;                                               break;
+        case '+': kind = accept(lexer, '=') ? TokenPlusEqual          : TokenPlus;                                               break;
+        case '?': kind = TokenQuestion;                                                                                          break;
+        case '}': kind = TokenRightBrace;                                                                                        break;
+        case ']': kind = TokenRightBracket;                                                                                      break;
+        case ')': kind = TokenRightParenthesis;                                                                                  break;
+        case ';': kind = TokenSemicolon;                                                                                         break;
+        case '/': kind = accept(lexer, '=') ? TokenSlashEqual         : TokenSlash;                                              break;
+        case '*': kind = accept(lexer, '=') ? TokenStarEqual          : TokenStar;                                               break;
+        case '~': kind = TokenTilde;                                                                                             break;
         default:
             errorf("%zu:%zu: error: unexpected character '%c'", start.line, start.column, c);
             exit(EXIT_FAILURE);
